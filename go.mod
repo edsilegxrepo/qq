@@ -16,7 +16,7 @@ require (
 	github.com/hamba/avro/v2 v2.31.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/itchyny/gojq v0.12.19
-	github.com/mattn/go-isatty v0.0.22
+	github.com/mattn/go-isatty v0.0.24
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/tmccombs/hcl2json v0.6.9
