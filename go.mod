@@ -14,7 +14,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/goccy/go-json v0.10.6
 	github.com/hamba/avro/v2 v2.31.0
-	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/itchyny/gojq v0.12.19
 	github.com/mattn/go-isatty v0.0.22
 	github.com/mitchellh/mapstructure v1.5.0
