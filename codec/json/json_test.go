@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/JFryy/qq/codec/util"
 	"github.com/goccy/go-json"
 )
 
@@ -219,5 +220,34 @@ func TestJSONMarshalEmptyValues(t *testing.T) {
 				t.Fatalf("Marshaled %s is not valid JSON: %v", tc.name, err)
 			}
 		})
+	}
+}
+
+func TestJSONPreserveKeyOrder(t *testing.T) {
+	util.PreserveKeyOrder = true
+	defer func() { util.PreserveKeyOrder = false }()
+
+	c := &Codec{}
+	input := `{"z": 1, "a": 2, "m": {"nested": "val", "arr": [1, 2, 3]}}`
+	var v any
+	err := c.Unmarshal([]byte(input), &v)
+	if err != nil {
+		t.Fatalf("Unmarshal with PreserveKeyOrder failed: %v", err)
+	}
+
+	out, err := c.Marshal(v)
+	if err != nil {
+		t.Fatalf("Marshal with PreserveKeyOrder failed: %v", err)
+	}
+	if !strings.Contains(string(out), `"z": 1`) {
+		t.Errorf("expected output to contain z: 1, got %s", string(out))
+	}
+
+	compact, err := c.MarshalCompact(v)
+	if err != nil {
+		t.Fatalf("MarshalCompact failed: %v", err)
+	}
+	if len(compact) == 0 {
+		t.Errorf("compact output empty")
 	}
 }

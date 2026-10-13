@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [0.4.0] - 2026-10-12
+
+### Added
+- **Dynamic Version Derivation & Dependency Management**:
+  - Implemented dynamic version resolution via `runtime/debug.ReadBuildInfo()` when installed using `go install`, falling back gracefully to `"dev"` when `-ldflags` is not supplied.
+
+### Fixed & Improved
+- **TOML Array of Tables Direct Querying**:
+  - Normalized generic TOML containers and arrays of tables to allow direct `gojq` queries without intermediate JSON serialization or integer precision loss.
+- **HCL & Terraform Round-Trip Integrity**:
+  - Corrected Terraform block attributes in HCL round-trip transcoding, accurately distinguishing between HCL blocks and object-list attributes.
+- **Gron Stability & Deterministic Output**:
+  - Resolved panic on malformed array assignments and invalid indices in Gron deserialization.
+  - Added deterministic map key sorting during Gron traversal for reproducible outputs and diffs.
+- **Large Integer Precision Preservation**:
+  - Upgraded JSON, JSONL, and Gron generic deserialization to preserve large integer precision (values > $2^{53}$) without lossy IEEE-754 float64 conversion.
+- **Malformed Environment Variable Rejection**:
+  - Enforced strict syntax validation on `.env` file key-value pairs, rejecting malformed lines.
+- **Deterministic Key Serialization**:
+  - Added deterministic key sorting for INI and Parquet schema serialization.
+
+### Dependencies & Maintenance
+- Bumped core dependencies
+
+---
+
 ## [0.3.5] - 2026-07-10
 
 ### Added

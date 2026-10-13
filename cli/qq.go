@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var osExit = os.Exit
 
 func CreateRootCmd() *cobra.Command {
 	var inputType, outputType string
@@ -39,15 +40,15 @@ func CreateRootCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			if version {
 				fmt.Println("qq version", resolveVersion())
-				os.Exit(0)
+				osExit(0)
 			}
 			if len(args) == 0 && !cmd.Flags().Changed("input") && !cmd.Flags().Changed("output") && !cmd.Flags().Changed("raw-input") && isTerminal(os.Stdin) {
 				err := cmd.Help()
 				if err != nil {
 					fmt.Println(err)
-					os.Exit(1)
+					osExit(1)
 				}
-				os.Exit(0)
+				osExit(0)
 			}
 			handleCommand(cmd, args, inputType, outputType, rawOutput, help, interactive, monochrome, stream, slurp, exitStatus, preserveKeyOrder, noAutoConvert)
 		},
@@ -80,25 +81,25 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 	if help {
 		val := CreateRootCmd().Help()
 		fmt.Println(val)
-		os.Exit(0)
+		osExit(0)
 	}
 
 	// Validate: streaming and interactive modes are mutually exclusive
 	if stream && interactive {
 		fmt.Println("Error: --stream and --interactive flags cannot be used together")
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// Validate: slurp and streaming are mutually exclusive
 	if slurp && stream {
 		fmt.Println("Error: --slurp and --stream flags cannot be used together")
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// Validate: slurp and interactive are mutually exclusive
 	if slurp && interactive {
 		fmt.Println("Error: --slurp and --interactive flags cannot be used together")
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// handle input with stdin or file
@@ -111,7 +112,7 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 			input, err = io.ReadAll(os.Stdin)
 			if err != nil {
 				fmt.Println(err)
-				os.Exit(1)
+				osExit(1)
 			}
 		}
 	case 1:
@@ -122,7 +123,7 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 				file, err := os.Open(args[0])
 				if err != nil {
 					fmt.Println(err)
-					os.Exit(1)
+					osExit(1)
 				}
 				inputReader = file
 			} else {
@@ -130,7 +131,7 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 				input, err = os.ReadFile(args[0])
 				if err != nil {
 					fmt.Println(err)
-					os.Exit(1)
+					osExit(1)
 				}
 			}
 		} else {
@@ -141,7 +142,7 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 				input, err = io.ReadAll(os.Stdin)
 				if err != nil {
 					fmt.Println(err)
-					os.Exit(1)
+					osExit(1)
 				}
 			}
 		}
@@ -152,14 +153,14 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 			file, err := os.Open(args[1])
 			if err != nil {
 				fmt.Println(err)
-				os.Exit(1)
+				osExit(1)
 			}
 			inputReader = file
 		} else {
 			input, err = os.ReadFile(args[1])
 			if err != nil {
 				fmt.Println(err)
-				os.Exit(1)
+				osExit(1)
 			}
 		}
 	}
@@ -179,13 +180,13 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 	}
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	outputCodec, err := codec.GetEncodingType(outputtype)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// Handle streaming mode
@@ -200,7 +201,7 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 		query, err := gojq.Parse(expression)
 		if err != nil {
 			fmt.Printf("Error parsing jq expression: %v\n", err)
-			os.Exit(1)
+			osExit(1)
 		}
 
 		executeStreamingQuery(query, inputReader, inputCodec, outputCodec, rawInput, monochrome)
@@ -209,7 +210,7 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 		if file, ok := inputReader.(*os.File); ok && file != os.Stdin {
 			_ = file.Close()
 		}
-		os.Exit(0)
+		osExit(0)
 	}
 
 	// Standard (non-streaming) mode
@@ -220,13 +221,13 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 		data, err = slurpInputs(input, inputCodec)
 		if err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			osExit(1)
 		}
 	} else {
 		err = codec.Unmarshal(input, inputCodec, &data)
 		if err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			osExit(1)
 		}
 	}
 
@@ -234,34 +235,34 @@ func handleCommand(cmd *cobra.Command, args []string, inputtype string, outputty
 		query, err := gojq.Parse(expression)
 		if err != nil {
 			fmt.Printf("Error parsing jq expression: %v\n", err)
-			os.Exit(1)
+			osExit(1)
 		}
 
 		exitCode := executeQuery(query, data, outputCodec, rawInput, monochrome, exitStatus)
-		os.Exit(exitCode)
+		osExit(exitCode)
 	}
 
 	jsonBytes, err := codec.Marshal(data, codec.JSON)
 	if err != nil {
 		fmt.Println("Error preparing TUI buffer:", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	queryExpr, ok := tui.Interact(string(jsonBytes))
 	if !ok {
 		fmt.Println("\033[33mExited without executing query\033[0m")
-		os.Exit(0)
+		osExit(0)
 	}
 
 	query, err := gojq.Parse(queryExpr)
 	if err != nil {
 		fmt.Printf("Error parsing selected jq expression: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	fmt.Printf("\033[36m# Query: %s\033[0m\n", queryExpr)
 	exitCode := executeQuery(query, data, outputCodec, rawInput, monochrome, exitStatus)
-	os.Exit(exitCode)
+	osExit(exitCode)
 }
 
 func isTerminal(f *os.File) bool {
@@ -428,7 +429,7 @@ func executeStreamingQuery(query *gojq.Query, reader io.Reader, inputType codec.
 				case err := <-errChan:
 					if err != nil {
 						fmt.Printf("Error parsing stream: %v\n", err)
-						os.Exit(1)
+						osExit(1)
 					}
 				default:
 				}
@@ -444,7 +445,7 @@ func executeStreamingQuery(query *gojq.Query, reader io.Reader, inputType codec.
 				}
 				if err, ok := v.(error); ok {
 					fmt.Printf("Error executing jq expression: %v\n", err)
-					os.Exit(1)
+					osExit(1)
 				}
 
 				// Stream elements are always emitted as compact JSON (one line
@@ -452,7 +453,7 @@ func executeStreamingQuery(query *gojq.Query, reader io.Reader, inputType codec.
 				b, err := json.Marshal(v)
 				if err != nil {
 					fmt.Printf("Error formatting result: %v\n", err)
-					os.Exit(1)
+					osExit(1)
 				}
 				fmt.Println(string(b))
 			}
@@ -460,7 +461,7 @@ func executeStreamingQuery(query *gojq.Query, reader io.Reader, inputType codec.
 		case err := <-errChan:
 			if err != nil {
 				fmt.Printf("Error parsing stream: %v\n", err)
-				os.Exit(1)
+				osExit(1)
 			}
 		}
 	}

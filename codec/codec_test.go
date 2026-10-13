@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alecthomas/chroma/lexers"
 	"github.com/goccy/go-json"
 )
 
@@ -564,5 +565,42 @@ func TestDisableAutoConvert(t *testing.T) {
 ]`
 	if string(marshaledDisabled) != expectedDisabled {
 		t.Errorf("expected string types when auto-conversion is disabled:\n  got: %s\n  want: %s", string(marshaledDisabled), expectedDisabled)
+	}
+}
+
+func TestPrettyFormat(t *testing.T) {
+	jsonStr := `{"key": "value", "num": 123}`
+	res, err := PrettyFormat(jsonStr, JSON, false, false)
+	if err != nil {
+		t.Fatalf("PrettyFormat failed: %v", err)
+	}
+	if len(res) == 0 {
+		t.Errorf("expected non-empty formatted output")
+	}
+
+	rawRes, err := PrettyFormat(jsonStr, JSON, true, true)
+	if err != nil {
+		t.Fatalf("PrettyFormat raw failed: %v", err)
+	}
+	if len(rawRes) == 0 {
+		t.Errorf("expected non-empty raw output")
+	}
+
+	// Test unsupported or special format fallbacks
+	_, _ = PrettyFormat(jsonStr, CSV, false, true)
+}
+
+func TestColorizeTokens(t *testing.T) {
+	lexer := lexers.Get("json")
+	if lexer == nil {
+		t.Fatal("json lexer not found")
+	}
+	iterator, err := lexer.Tokenise(nil, `{"key": "value", "number": 42, "bool": true}`)
+	if err != nil {
+		t.Fatalf("Tokenise failed: %v", err)
+	}
+	out := colorizeTokens(iterator)
+	if len(out) == 0 {
+		t.Errorf("expected colorized output")
 	}
 }

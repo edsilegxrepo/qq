@@ -3,6 +3,8 @@ package xml
 import (
 	"strings"
 	"testing"
+
+	"github.com/JFryy/qq/codec/util"
 )
 
 func TestBasicXMLMarshalUnmarshal(t *testing.T) {
@@ -315,5 +317,26 @@ func TestXMLValidFormat(t *testing.T) {
 	closeCount := strings.Count(xmlStr, "</item1>")
 	if openCount != closeCount {
 		t.Errorf("Mismatched item1 tags: %d open, %d close", openCount, closeCount)
+	}
+}
+
+func TestXMLPreserveKeyOrder(t *testing.T) {
+	util.PreserveKeyOrder = true
+	defer func() { util.PreserveKeyOrder = false }()
+
+	c := &Codec{}
+	xmlInput := `<root><title>test</title><count>10</count><items><item>a</item><item>b</item></items></root>`
+	var v any
+	err := c.Unmarshal([]byte(xmlInput), &v)
+	if err != nil {
+		t.Fatalf("Unmarshal with PreserveKeyOrder failed: %v", err)
+	}
+
+	out, err := c.Marshal(v)
+	if err != nil {
+		t.Fatalf("Marshal with PreserveKeyOrder failed: %v", err)
+	}
+	if !strings.Contains(string(out), "<title>test</title>") {
+		t.Errorf("expected marshaled XML to contain title element, got: %s", string(out))
 	}
 }

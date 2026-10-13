@@ -70,7 +70,7 @@ graph TD
 ### Design Decisions
 
 #### Modular Codec Routing
-Rather than coupling format transformations, `qq` maps format extensions to an `Encoding` struct defining unmarshaling and marshaling strategies. This mapping is registered in [Codecs](codec/codec.go#L147).
+Rather than coupling format transformations, `qq` maps format extensions to an `Encoding` struct defining unmarshaling and marshaling strategies. This mapping is registered in [Codecs](codec/codec.go#L146).
 
 #### Key Preservation Strategy
 Standard Go map unmarshaling is non-deterministic and discards key order, sorting keys alphabetically during serialization. `qq` implements an order preservation mechanism. In [codec/util/order.go](codec/util/order.go), `util.SetKeyOrder` stores the key sequence of maps during unmarshaling, indexed by the memory pointer of the map representation:
@@ -122,7 +122,7 @@ func StreamParser(reader io.Reader, inputType EncodingType) (<-chan any, <-chan 
 
 1. **Short Execution Lifespan**: Since the CLI tool runs as a transient utility, memory allocations (specifically the pointer-based map key ordering registry) are reclaimed on process exit. Long-running executions do not automatically prune the pointer cache unless [ClearKeyOrder](codec/util/order.go#L34) is explicitly triggered.
 2. **Schema Invariance**: Binary formats (e.g., Avro, Proto) assume that incoming payloads are self-describing (e.g., Avro Object Container Files) or that structural parameters are provided.
-3. **Interactive Mode JSON Dependency**: The TUI in [internal/tui/interactive.go](internal/tui/interactive.go) decodes its internal state buffer using `json.Unmarshal`. Using `--interactive` with output formats other than JSON causes unmarshaling failures in the query preview window since the data is marshaled into the target output format before initializing the TUI.
+3. **Interactive Mode Buffer Decoupling**: The TUI in [internal/tui/interactive.go](internal/tui/interactive.go) decodes its internal live preview state buffer using `json.Unmarshal`. To prevent unmarshaling failures when targeting non-JSON formats (e.g. YAML, XML, TOML), the CLI controller always initializes the interactive state buffer as JSON, and converts to the target output format only upon graceful exit.
 4. **Streaming Mode Output Serialization**: When running in `--stream` mode, output elements are always serialized and emitted as compact JSON lines (matching standard `jq --stream` behavior) regardless of the `-o` / `--output` flag setting.
 
 ### Edge Cases Handled
@@ -142,7 +142,7 @@ func StreamParser(reader io.Reader, inputType EncodingType) (<-chan any, <-chan 
 
 ### Performance and Efficiency
 
-- **High-Performance JSON Handling**: Uses `github.com/goccy/go-json` for JSON parsing and rendering, which bypasses reflection overhead.
+- **High-Performance JSON Handling & Exact Integer Retention**: Uses `github.com/goccy/go-json` for fast JSON parsing and serialization. For generic destinations, `json.NewDecoder` with `UseNumber()` and `NormalizeNumbers` preserves exact 64-bit integer precision, preventing IEEE-754 `float64` truncation for integer values exceeding $2^{53}$.
 - **Constant Memory Footprint in Stream Mode**: Streaming mode processes inputs line-by-line or token-by-token (for JSON/YAML/CSV/TSV), keeping memory consumption low regardless of file size.
 - **Lexer Token Caching**: In [PrettyFormat](codec/stdout.go#L14), syntax colorization uses the Chroma lexer fallback mechanisms to prevent repeated initialization overhead.
 
@@ -161,7 +161,9 @@ Because `qq` maps all format conversions through Go's standard runtime represent
   - Automatically parses numeric and boolean strings into Go primitives, unless `--no-auto-convert` is set.
 
 ### 2. TOML
-- **Numeric Normalization**:
+- **Query Normalization**:
+  - During unmarshaling, generic TOML containers and arrays of tables (`[]map[string]any`) are normalized into queryable `gojq` types (`normalizeQueryValues`), ensuring direct JQ filtering works seamlessly without intermediate JSON serialization or 64-bit integer precision loss.
+- **Numeric Normalization on Serialization**:
   - Since JSON representations treat all numbers as `float64`, translating JSON-derived inputs to TOML directly would force integer properties to render as float representations (e.g. `120.0`). The TOML codec recursively normalizes floats: whole-numbered floats are cast back to `int64`.
 - **Homogeneity Constraint**:
   - The TOML codec scans array structures to verify type consistency. If any element in an array is a non-whole float, all elements in that array are left as float values. This prevents the generation of mixed integer/float arrays which are illegal in TOML spec versions prior to 1.0.
@@ -175,23 +177,29 @@ Because `qq` maps all format conversions through Go's standard runtime represent
 ### 4. INI
 - **Scope Restrictions**:
   - The INI codec ignores unnamed default section properties (properties defined before the first `[section]` tag) during unmarshaling.
+  - Section keys and attributes are deterministically sorted during serialization.
   - Values nested deeper than two levels (e.g. `[section] -> key = value`) will be stringified using `%v`, as INI format does not support multi-level nested mapping natively.
 
 ### 5. Gron
-- **Formatting Constraints**:
-  - Gron deserialization is strictly line-by-line and expects the ` = ` delimiter (with spaces on both sides). Lines not conforming to this exact pattern will fail with a parsing format error.
+- **Formatting Constraints & Robustness**:
+  - Gron deserialization is strictly line-by-line and expects the ` = ` delimiter (with spaces on both sides). Lines not conforming to this pattern return structured errors.
+  - Array index brackets and assignments are strictly validated, preventing out-of-bounds panics on malformed indices.
+  - Serialization traverses and sorts map keys deterministically, guaranteeing reproducible diffs across executions.
+  - Value parsing uses `util.ParseValue`, allowing numeric/boolean auto-coercion or preservation via `--no-auto-convert`.
 
 ### 6. Environment Variables (`.env`) & Java Properties (`.properties`)
-- **Flat Mapping Constraint**:
-  - Both `.env` and `.properties` codecs require a flat key-value map (`map[string]string`). Nesting objects or slices inside these formats will throw a `"format only supports simple key-value pairs, cannot convert complex nested structures"` error.
+- **Flat Mapping & Syntax Validation**:
+  - Both `.env` and `.properties` codecs require a flat key-value map (`map[string]string`). Nesting objects or slices inside these formats will throw a validation error.
+  - The `.env` parser strictly validates assignment tokens (`key=value`), rejecting malformed lines.
 
 ### 7. Protocol Buffers (`.proto`)
 - **Read-Only**:
   - The Protocol Buffers codec only implements `Unmarshal`. It parses `.proto` syntax and generates a JSON-based abstract syntax tree (AST) mapping packages, messages, fields, and enums. Marshaling back to `.proto` text files is not supported (it will default to writing JSON representation of the AST).
 
 ### 8. HCL / Terraform
-- **Wrapping & Type mapping**:
-  - Inputs that are not top-level maps are wrapped in a map under the key `data`. Slices with length 1 containing maps are converted into HCL blocks, while other slices are mapped to `cty.TupleVal`. Non-scalar unsupported types are logged as warnings and skipped.
+- **Block & Attribute Preservation**:
+  - Distinguishes HCL blocks from object-list attributes using convention detection (`isBlockValue`), preserving block labels and repeated bodies.
+  - Object attributes are rendered using token expressions, enabling clean round-trip fidelity for Terraform configurations without attribute corruption.
 
 ### Format Compatibility Matrix
 
@@ -225,16 +233,16 @@ The table below summarizes the compatibility rules and constraints when converti
 
 ### Operational Flow
 
-1. **Initialization**: [main.go](main.go) handles OS signals and passes execution to [CreateRootCmd](cli/qq.go#L18).
-2. **Command and Flags Evaluation**: Cobra parses arguments in [handleCommand](cli/qq.go#L70). The parameters `--stream`, `--interactive`, and `--slurp` are verified for mutual exclusivity.
+1. **Initialization**: [main.go](main.go) handles OS signals and passes execution to [CreateRootCmd](cli/qq.go#L20).
+2. **Command and Flags Evaluation**: Cobra parses arguments in [handleCommand](cli/qq.go#L71). The parameters `--stream`, `--interactive`, and `--slurp` are verified for mutual exclusivity.
 3. **Format Detection**:
    - If `-i` / `--input` is set, it overrides the auto-detection.
-   - If not set and a file argument is provided, the input format is inferred from the extension via [inferFileType](cli/qq.go#L272).
+   - If not set and a file argument is provided, the input format is inferred from the extension via [inferFileType](cli/qq.go#L285).
    - Otherwise, the format defaults to JSON.
 4. **Ingestion and Routing**:
-   - **Stream Mode**: Invokes [executeStreamingQuery](cli/qq.go#L399). It launches a channel-based parser to execute the query concurrently.
-   - **Interactive Mode**: Loads the entire dataset into memory, marshals it using the target output codec (which should be JSON or compatible due to TUI's internal JSON decoder), and calls [Interact](internal/tui/interactive.go#L334) to start the Bubbletea loop.
-   - **Slurp Mode**: Processes all incoming values into an array using [slurpInputs](cli/qq.go#L332) before execution.
+   - **Stream Mode**: Invokes [executeStreamingQuery](cli/qq.go#L417). It launches a channel-based parser to execute the query concurrently.
+   - **Interactive Mode**: Loads the entire dataset into memory, marshals it as JSON for the live TUI preview buffer, and calls [Interact](internal/tui/interactive.go#L319) to run the interactive REPL. The final query result is converted to the target output format on exit.
+   - **Slurp Mode**: Processes all incoming values into an array using [slurpInputs](cli/qq.go#L345) before execution.
    - **Standard Mode**: Unmarshals the input using the selected codec.
 5. **Execution & Rendering**: The JQ query is parsed and executed via `gojq.Query.Run`. Results are serialized by the output codec and printed. If the target is a terminal and `--monochrome-output` is false, the text is highlighted using Chroma in [PrettyFormat](codec/stdout.go#L14).
 
@@ -335,7 +343,7 @@ The codebase enforces a clear separation of concerns:
 - [internal/tui](internal/tui) separates interactive REPL logic from standard CLI pipelines.
 
 ### Concurrency
-[StreamParser](codec/stream.go#L15) implements an asynchronous producer-consumer pattern using Go channels. This decouples file reading from JQ engine execution, avoiding race conditions and limiting RAM consumption.
+[StreamParser](codec/stream.go#L16) implements an asynchronous producer-consumer pattern using Go channels. This decouples file reading from JQ engine execution, avoiding race conditions and limiting RAM consumption.
 
 ### Error Handling
 The application uses strict error propagation:
@@ -564,12 +572,13 @@ graph TD
 The project enforces quality validation checks and constructs optimized, static binaries for target platforms.
 
 #### 1. Automated Build
-Automated compilation and local installation are orchestrated via the project `Makefile`. The `Makefile` dynamically detects the host operating system and compiles the target binary named `qq.exe` on Windows and `qq` on other platforms:
+Automated compilation and local installation are orchestrated via the project `Makefile`. The `Makefile` dynamically detects the host operating system, enables PIE flags (`GO_OPTS`), and compiles the target binary named `qq.exe` on Windows and `qq` on other platforms:
+```sh
 # Compile the default binary (resolves version dynamically using git)
 make build
 
 # Compile with a specific version override (e.g. for release pipelines)
-make build VERSION=0.3.5-7ad8764
+make build VERSION=0.4.0-7ad8764
 
 # Compile, test, and copy the binary to ~/.local/bin
 make install
@@ -581,7 +590,7 @@ For manual quality checking, custom targeting, and production cross-compilation,
 ##### Code Quality & Security Audits
 Prior to compilation, format the codebase, run static analysis, check for vulnerabilities, and scan for security issues:
 ```sh
-go fmt ./...
+gofumpt -l -w .
 golangci-lint run ./... --no-config
 govulncheck ./...
 gosec ./...

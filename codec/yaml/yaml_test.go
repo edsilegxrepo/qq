@@ -1,7 +1,10 @@
 package yaml
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/JFryy/qq/codec/util"
 )
 
 // Helper function to check numeric values that might be int, int64, uint64, or float64
@@ -545,5 +548,26 @@ name: doc2`
 		if _, ok := result.(map[string]any); !ok {
 			t.Errorf("Expected array or map, got %T", result)
 		}
+	}
+}
+
+func TestYAMLPreserveKeyOrder(t *testing.T) {
+	util.PreserveKeyOrder = true
+	defer func() { util.PreserveKeyOrder = false }()
+
+	c := &Codec{}
+	yamlInput := "z: 1\na: 2\nm:\n  nested: value\n  arr:\n    - 1\n    - 2\n"
+	var v any
+	err := c.Unmarshal([]byte(yamlInput), &v)
+	if err != nil {
+		t.Fatalf("Unmarshal with PreserveKeyOrder failed: %v", err)
+	}
+
+	out, err := c.Marshal(v)
+	if err != nil {
+		t.Fatalf("Marshal with PreserveKeyOrder failed: %v", err)
+	}
+	if !strings.Contains(string(out), "z: 1") {
+		t.Errorf("expected marshaled YAML to contain 'z: 1', got: %s", string(out))
 	}
 }

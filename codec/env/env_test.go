@@ -31,7 +31,7 @@ func TestInvalidAssignments(t *testing.T) {
 			}
 
 			original := map[string]string{"KEEP": "old value"}
-			var decoded = map[string]string{"KEEP": "old value"}
+			decoded := map[string]string{"KEEP": "old value"}
 			if err := codec.Unmarshal([]byte(content), &decoded); err == nil || err.Error() != wantErr {
 				t.Fatalf("Unmarshal error = %v, want %q", err, wantErr)
 			}

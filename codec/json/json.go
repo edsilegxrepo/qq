@@ -256,8 +256,6 @@ func marshalJSONOrdered(v any, indent string, currentIndent string) ([]byte, err
 	}
 }
 
-
-
 // Unmarshal decodes a single JSON value. Generic destinations receive int for
 // integers, because decoding them as float64 corrupts values above 2^53.
 func Unmarshal(data []byte, v any) error {
