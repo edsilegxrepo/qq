@@ -38,13 +38,7 @@ func (c *Codec) Unmarshal(data []byte, v any) error {
 		}
 
 		var obj any
-		var err error
-		if util.PreserveKeyOrder {
-			err = jsonCodec.Unmarshal([]byte(line), &obj)
-		} else {
-			err = json.Unmarshal([]byte(line), &obj)
-		}
-		if err != nil {
+		if err := jsonCodec.Unmarshal([]byte(line), &obj); err != nil {
 			return fmt.Errorf("error parsing JSON on line %d: %v", lineNum, err)
 		}
 		result = append(result, obj)
@@ -54,7 +48,24 @@ func (c *Codec) Unmarshal(data []byte, v any) error {
 		return fmt.Errorf("error reading JSONL: %v", err)
 	}
 
-	jsonData, err := jsonCodec.MarshalCompact(result)
+	// A JSON round trip would turn integers back into float64.
+	if ptr, ok := v.(*any); ok {
+		if result == nil {
+			*ptr = nil
+		} else {
+			*ptr = result
+		}
+		return nil
+	}
+
+	// Marshal and unmarshal through JSON to convert to target type
+	var jsonData []byte
+	var err error
+	if util.PreserveKeyOrder {
+		jsonData, err = jsonCodec.MarshalCompact(result)
+	} else {
+		jsonData, err = json.Marshal(result)
+	}
 	if err != nil {
 		return err
 	}

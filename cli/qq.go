@@ -9,14 +9,13 @@ import (
 	"strings"
 
 	"github.com/JFryy/qq/codec"
+	qqjson "github.com/JFryy/qq/codec/json"
 	"github.com/JFryy/qq/internal/tui"
 	"github.com/goccy/go-json"
 	"github.com/itchyny/gojq"
 	"github.com/spf13/cobra"
 )
 
-// Version is the application version, which can be overwritten at build time using ldflags.
-var Version = "dev"
 
 func CreateRootCmd() *cobra.Command {
 	var inputType, outputType string
@@ -31,7 +30,6 @@ func CreateRootCmd() *cobra.Command {
 	var preserveKeyOrder bool
 	var noAutoConvert bool
 	encodings := strings.Join(codec.GetSupportedExtensions(), ", ")
-	v := Version
 	desc := fmt.Sprintf("qq is a interoperable configuration format transcoder with jq querying ability powered by gojq. qq is multi modal, and can be used as a replacement for jq or be interacted with via a repl with autocomplete and realtime rendering preview for building queries. Supported formats include %s", encodings)
 	cmd := &cobra.Command{
 		Use:   "qq [expression] [file] [flags] \n  cat [file] | qq [expression] [flags] \n  qq -I file",
@@ -40,7 +38,7 @@ func CreateRootCmd() *cobra.Command {
 		Long: desc,
 		Run: func(cmd *cobra.Command, args []string) {
 			if version {
-				fmt.Println("qq version", v)
+				fmt.Println("qq version", resolveVersion())
 				os.Exit(0)
 			}
 			if len(args) == 0 && !cmd.Flags().Changed("input") && !cmd.Flags().Changed("output") && !cmd.Flags().Changed("raw-input") && isTerminal(os.Stdin) {
@@ -351,6 +349,7 @@ func slurpInputs(input []byte, inputCodec codec.EncodingType) (any, error) {
 	case codec.JSON:
 		// JSON can have multiple whitespace-separated values
 		decoder := json.NewDecoder(bytes.NewReader(input))
+		decoder.UseNumber()
 		for {
 			var value any
 			if err := decoder.Decode(&value); err != nil {
@@ -359,7 +358,11 @@ func slurpInputs(input []byte, inputCodec codec.EncodingType) (any, error) {
 				}
 				return nil, fmt.Errorf("error parsing JSON: %v", err)
 			}
-			values = append(values, value)
+			normalized, err := qqjson.NormalizeNumbers(value)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing JSON: %v", err)
+			}
+			values = append(values, normalized)
 		}
 
 	case codec.JSONL:

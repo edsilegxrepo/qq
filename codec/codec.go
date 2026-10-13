@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/JFryy/qq/codec/util"
-
 	// dedicated codec packages and wrappers where appropriate
 	"github.com/JFryy/qq/codec/avro"
 	"github.com/JFryy/qq/codec/base64"
