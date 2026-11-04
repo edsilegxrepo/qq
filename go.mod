@@ -12,7 +12,7 @@ require (
 	github.com/clbanning/mxj/v2 v2.7.0
 	github.com/fatih/color v1.19.0
 	github.com/fxamacker/cbor/v2 v2.9.6
-	github.com/goccy/go-json v0.11.2
+	github.com/goccy/go-json v0.12.0
 	github.com/hamba/avro/v2 v2.31.0
 	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/itchyny/gojq v0.12.19
