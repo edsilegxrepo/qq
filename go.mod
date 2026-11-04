@@ -11,7 +11,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/clbanning/mxj/v2 v2.7.0
 	github.com/fatih/color v1.19.0
-	github.com/fxamacker/cbor/v2 v2.9.6
+	github.com/fxamacker/cbor/v2 v2.10.0
 	github.com/goccy/go-json v0.11.2
 	github.com/hamba/avro/v2 v2.31.0
 	github.com/hashicorp/hcl/v2 v2.25.0
