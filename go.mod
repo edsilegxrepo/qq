@@ -23,7 +23,7 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/zclconf/go-cty v1.19.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	gopkg.in/ini.v1 v1.67.3
 )
 
